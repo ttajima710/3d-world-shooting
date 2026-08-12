@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+
+# 圧縮前の元アセット（手元のバックアップ用。原本は 3D-world-game/assets や
+# 3D_shooting/3d_data など、リポジトリ内の別の場所にあるため二重管理を避ける）
+asset_original/
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json

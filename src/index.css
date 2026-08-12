@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --neon: #39f6ff;
+  --hot: #ff3b6b;
+  --gold: #ffd23f;
+  --ink: #03060f;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #root { height: 100%; overflow: hidden; background: var(--ink); }
+body {
+  font-family: "Courier New", ui-monospace, monospace;
+  color: var(--neon);
+  -webkit-user-select: none;
+  user-select: none;
+}
+canvas { display: block; }
+
+.vignette {
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.65) 100%);
+}
