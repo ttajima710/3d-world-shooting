@@ -33,6 +33,9 @@ export default function Hud() {
   const bombs = useGameStore((s) => s.bombs)
   const flash = useGameStore((s) => s.flash)
   const shield = useGameStore((s) => s.shield)
+  const shieldMax = useGameStore((s) => s.shieldMax)
+  const laserLv = useGameStore((s) => s.laserLv)
+  const gold = useGameStore((s) => s.gold)
   const match = useGameStore((s) => s.match)
   const netPlayers = useGameStore((s) => s.netPlayers)
   const notice = useGameStore((s) => s.notice)
@@ -47,6 +50,12 @@ export default function Hud() {
   }, [screen])
 
   if (screen !== 'playing') return null
+
+  // シールドは金リングで最大値が増えるので、割合で描く
+  const shieldPct = Math.max(0, Math.min(100, (shield / (shieldMax || 100)) * 100))
+  const shieldLow = shieldPct <= 30
+  // レーザー強化の色（Lv3は青。3D_shooting版と同じ配色）
+  const lvColor = laserLv >= 3 ? '#49b6ff' : '#6dff9e'
 
   const box = 'absolute px-3.5 py-2 border text-[13px] tracking-[2px] backdrop-blur-[2px]'
   const boxStyle = {
@@ -88,7 +97,11 @@ export default function Hud() {
               <>生存 <b className="text-gold text-[16px] sm:text-[20px]">{match.aliveCount}</b> 人 &nbsp; BOMB {bombs}</>
             )
           ) : (
-            <>WAVE 1 &nbsp; LASER LV1 &nbsp; BOMB {bombs}</>
+            <>
+              LASER <b className="text-[16px] sm:text-[20px]" style={{ color: lvColor, textShadow: `0 0 10px ${lvColor}` }}>LV{laserLv}</b>
+              &nbsp; BOMB <b className="text-gold text-[15px] sm:text-[18px]">{bombs}</b>
+              {gold > 0 && <>&nbsp; <span className="text-gold">{'●'.repeat(gold)}</span></>}
+            </>
           )}
         </div>
 
@@ -97,10 +110,10 @@ export default function Hud() {
           SHIELD
           <div className="mt-1 w-[92px] sm:w-[170px] h-[8px] sm:h-[10px] border" style={{ borderColor: 'rgba(255,59,107,.4)', background: 'rgba(255,59,107,.08)' }}>
             <div
-              className={shield <= 30 ? 'h-full animate-pulse' : 'h-full'}
+              className={shieldLow ? 'h-full animate-pulse' : 'h-full'}
               style={{
-                width: `${Math.max(0, shield)}%`,
-                background: shield <= 30 ? 'linear-gradient(90deg,#ff2b4b,#ff5c33)' : 'linear-gradient(90deg,var(--hot),var(--gold))',
+                width: `${shieldPct}%`,
+                background: shieldLow ? 'linear-gradient(90deg,#ff2b4b,#ff5c33)' : 'linear-gradient(90deg,var(--hot),var(--gold))',
                 boxShadow: '0 0 12px var(--hot)',
                 transition: 'width .25s ease',
               }} />

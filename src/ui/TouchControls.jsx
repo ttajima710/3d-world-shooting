@@ -6,7 +6,7 @@ import { useGameStore } from '../store/gameStore.js'
 import { G } from '../game/state.js'
 import { CONFIG } from '../game/config.js'
 import { startLoop, rollButtonPress, rollButtonRelease } from '../game/systems/flight.js'
-import { fireLaser, launchBomb, triggerBombDetonations } from '../game/systems/weapons.js'
+import { fireLaser, launchBomb, triggerBombDetonations, laserCooldown } from '../game/systems/weapons.js'
 
 const IS_TOUCH = typeof window !== 'undefined' && (('ontouchstart' in window) || navigator.maxTouchPoints > 0)
 
@@ -116,7 +116,7 @@ export default function TouchControls() {
   })
 
   // hold to auto-fire (GameTick repeats at CONFIG.fireCooldown); fire one immediately
-  const fireDown = () => { G.shootHeld = true; if (G.state.fireCd <= 0 && G.act.mode !== 'looping' && G.act.mode !== 'uturn') { fireLaser(); G.state.fireCd = CONFIG.fireCooldown } }
+  const fireDown = () => { G.shootHeld = true; if (G.state.fireCd <= 0 && G.act.mode !== 'looping' && G.act.mode !== 'uturn') { fireLaser(); G.state.fireCd = laserCooldown() } }
   // touch-none = touch-action:none so the browser never steals the tap as a scroll/zoom gesture
   // ルート全体は透過させず（押しづらくなるため）、ボタン個別に opacity-75（押下中は opacity-100）を付ける
   const btn = 'pointer-events-auto touch-none rounded-full flex items-center justify-center font-mono select-none opacity-75 active:opacity-100'

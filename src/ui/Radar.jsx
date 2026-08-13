@@ -11,15 +11,34 @@ export default function Radar() {
   const radar = useGameStore((s) => s.radar)
   const stage = useGameStore((s) => s.stage)
 
-  // 幅の狭い画面（スマホ縦持ちなど）ではレーダーを小さくする
-  const [SIZE, setSize] = useState(() => (typeof window !== 'undefined' && window.innerWidth < 480 ? 120 : 170))
+  // 幅の狭い画面（スマホ縦持ちなど）ではレーダーを小さくする（3段階）
+  const pickSize = () => {
+    const w = typeof window !== 'undefined' ? window.innerWidth : Infinity
+    if (w < 480) return 68
+    if (w < 820) return 120
+    return 170
+  }
+  const [SIZE, setSize] = useState(pickSize)
   useEffect(() => {
-    const onResize = () => setSize(window.innerWidth < 480 ? 120 : 170)
+    const onResize = () => setSize(pickSize())
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
   if (screen !== 'playing') return null
+
+  // スマホサイズ（SIZE<=68）では圧迫感を減らすため少し透明にする
+  const dim = SIZE <= 68 ? 0.78 : 1
+  // 装飾類はSIZEに連動させ、縮小時も視認性を保つ
+  const altW = Math.max(6, Math.round(SIZE / 17))
+  const enemyDot = Math.max(4, Math.round(SIZE / 28))
+  const playerDot = Math.max(5, Math.round(SIZE / 21))
+  const itemDot = Math.max(6, Math.round(SIZE / 20))
+  const shipSide = Math.max(5, Math.round(SIZE / 21))
+  const shipTip = Math.max(10, Math.round(SIZE / 10.6))
+  const centerMark = Math.max(5, Math.round(SIZE / 24))
+  const altFontSize = Math.max(7, Math.round(SIZE / 19))
+  const altBarH = Math.max(2, Math.round(SIZE / 57))
 
   // -1..1 → 0..100%（枠端に2%マージンでクランプ）
   const toPct = (v) => Math.max(2, Math.min(98, 50 + v * 50))
@@ -41,6 +60,7 @@ export default function Radar() {
         className="relative"
         style={{
           width: SIZE, height: SIZE,
+          opacity: dim,
           border: '1px solid rgba(68,255,102,.55)',
           background: 'rgba(0,40,16,.35)',
           boxShadow: '0 0 12px rgba(68,255,102,.25), inset 0 0 24px rgba(68,255,102,.12)',
@@ -53,11 +73,11 @@ export default function Radar() {
         }}>
         {/* 中心マーク（フィールド中心） */}
         <div className="absolute" style={{
-          left: '50%', top: '50%', width: 7, height: 7,
+          left: '50%', top: '50%', width: centerMark, height: centerMark,
           transform: 'translate(-50%,-50%)',
           background:
-            'linear-gradient(rgba(68,255,102,.8), rgba(68,255,102,.8)) center/1px 7px no-repeat,' +
-            'linear-gradient(rgba(68,255,102,.8), rgba(68,255,102,.8)) center/7px 1px no-repeat',
+            `linear-gradient(rgba(68,255,102,.8), rgba(68,255,102,.8)) center/1px ${centerMark}px no-repeat,` +
+            `linear-gradient(rgba(68,255,102,.8), rgba(68,255,102,.8)) center/${centerMark}px 1px no-repeat`,
         }} />
         {/* 敵機（赤点。枠外は非表示、自機三角より下のレイヤー） */}
         {radar.enemies.map((e, i) => {
@@ -65,10 +85,23 @@ export default function Radar() {
           return (
             <div key={i} className="absolute" style={{
               left: `${toPct(e.x)}%`, top: `${toPct(e.z)}%`,
-              width: 6, height: 6, borderRadius: '50%',
+              width: enemyDot, height: enemyDot, borderRadius: '50%',
               background: '#ff2b4b',
               boxShadow: '0 0 5px #ff2b4b',
               transform: 'translate(-50%,-50%)',
+            }} />
+          )
+        })}
+        {/* 強化アイテム（種類ごとの色の四角。丸い敵機と形で区別できるようにする） */}
+        {(radar.items || []).map((it, i) => {
+          if (Math.abs(it.x) > 1.05 || Math.abs(it.z) > 1.05) return null
+          return (
+            <div key={'i' + i} className="absolute" style={{
+              left: `${toPct(it.x)}%`, top: `${toPct(it.z)}%`,
+              width: itemDot, height: itemDot,
+              background: it.c,
+              boxShadow: `0 0 5px ${it.c}`,
+              transform: 'translate(-50%,-50%) rotate(45deg)',
             }} />
           )
         })}
@@ -79,7 +112,7 @@ export default function Radar() {
           return (
             <div key={'p' + i} className="absolute" style={{
               left: `${toPct(p.x)}%`, top: `${toPct(p.z)}%`,
-              width: 8, height: 8, borderRadius: '50%',
+              width: playerDot, height: playerDot, borderRadius: '50%',
               background: col,
               border: '1px solid rgba(255,255,255,.7)',
               boxShadow: `0 0 6px ${col}`,
@@ -91,9 +124,9 @@ export default function Radar() {
         <div className="absolute" style={{
           left: `${left}%`, top: `${top}%`,
           width: 0, height: 0,
-          borderLeft: '8px solid transparent',
-          borderRight: '8px solid transparent',
-          borderBottom: `16px solid ${color}`,
+          borderLeft: `${shipSide}px solid transparent`,
+          borderRight: `${shipSide}px solid transparent`,
+          borderBottom: `${shipTip}px solid ${color}`,
           transform: `translate(-50%,-55%) rotate(${deg}deg)`,
           filter: `drop-shadow(0 0 6px ${color})`,
           transition: 'left .12s linear, top .12s linear',
@@ -101,18 +134,19 @@ export default function Radar() {
       </div>
       {/* 高度メーター */}
       <div className="relative" style={{
-        width: 10, height: SIZE,
+        width: altW, height: SIZE,
+        opacity: dim,
         border: '1px solid rgba(68,255,102,.55)',
         background: 'rgba(0,40,16,.35)',
         boxShadow: '0 0 12px rgba(68,255,102,.25), inset 0 0 24px rgba(68,255,102,.12)',
       }}>
         <div className="absolute" style={{
-          left: '50%', top: -13, transform: 'translateX(-50%)',
-          fontSize: 9, color: 'rgba(68,255,102,.85)', letterSpacing: 1,
+          left: '50%', top: -(altFontSize + 4), transform: 'translateX(-50%)',
+          fontSize: altFontSize, color: 'rgba(68,255,102,.85)', letterSpacing: 1,
           fontFamily: 'monospace', whiteSpace: 'nowrap',
         }}>ALT</div>
         <div className="absolute" style={{
-          left: 0, right: 0, height: 3,
+          left: 0, right: 0, height: altBarH,
           bottom: `${altPct}%`,
           background: '#ffd23f',
           boxShadow: '0 0 8px 2px #ffd23f',

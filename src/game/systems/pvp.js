@@ -186,7 +186,7 @@ function respawnSelf() {
   FLIGHT.pitch = 0; FLIGHT.roll = 0; FLIGHT.speed = C.speedNormal
   ship.quaternion.setFromEuler(_e.set(0, FLIGHT.heading, 0, 'YXZ'))
   ship.visible = true
-  G.state.shield = C.shieldMax
+  G.state.shield = G.act.shieldMax  // 金リングで増えていればその値まで回復
   G.act.mode = MODE.NORMAL
   G.crash.t = 0; G.crash.exploded = false; G.crash.overT = 0; G.crash.vy = 0
   G.match.invT = C.invincibleTime

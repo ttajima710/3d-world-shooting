@@ -12,13 +12,16 @@ export const useGameStore = create((set) => ({
   score: 0,
   bombs: 3,
   shield: 100,
+  shieldMax: 100,  // 金リング3個で増える（シールドバーの満タン基準）
+  laserLv: 1,      // 強化アイテム「L」で 1→3
+  gold: 0,         // 金リングの所持数（3個で最大シールドアップ）
   kills: 0,
   // stage: 'grass' | 'space'（スタート画面/ロビーで選択）
   stage: 'grass',
   // レーダー: rx/rz = フィールド半径で正規化した位置(-1..1超も可), hd = 機首方位(rad),
   // out = 境界外, alt = 現在高度（高度メーター用）, enemies = 敵の位置（赤点表示用）,
   // players = 他プレイヤーの位置（機体色の点で表示）
-  radar: { rx: 0, rz: 0, hd: 0, out: false, alt: 60, enemies: [], players: [] },
+  radar: { rx: 0, rz: 0, hd: 0, out: false, alt: 60, enemies: [], players: [], items: [] },
   // 衝突フラッシュ（ぶつかった直後だけ true）
   flash: false,
   // 命中マーク（敵/相手に当てた直後だけ true）

@@ -13,6 +13,8 @@ import { G } from '../state.js'
 import { CONFIG as C, MODE } from '../config.js'
 import { FLIGHT, hitShield } from './flight.js'
 import { explodeSmall, laserDistanceTo, segmentPointDistance } from './effects.js'
+import { laserHitBonus } from './weapons.js'
+import { dropItemAt } from './items.js'
 import { playSnd, beep } from '../../audio/audio.js'
 
 const ENEMY = {
@@ -41,6 +43,11 @@ for (const type of [1, 2]) {
     const mat = mesh.material.clone()
     mat.metalness = 0.2
     mat.roughness = 0.7
+    // 宇宙ステージでは背景が暗く機体が影で真っ黒に見えるため、機体自身をわずかに発光させて形が分かるようにする
+    // モデル側の発光マップが機体部分は真っ黒なので、それを外さないと色が乗らない
+    mat.emissiveMap = null
+    mat.emissive = new THREE.Color(ENEMY[type].color)
+    mat.emissiveIntensity = 0.5
     templates[type] = { geo, mat }
   }, undefined, () => { /* フォールバックを使う */ })
 }
@@ -128,6 +135,7 @@ function killEnemy(i, byPlayer = true) {
     G.state.kills += 1
     G.state.lastHitT = G.state.time // 命中マーク（HUD）
     playSnd('enemy', 0.5, 0.1)
+    dropItemAt(e.position)          // 一定確率で強化アイテムを落とす
   }
   removeEnemy(i)
 }
@@ -147,6 +155,8 @@ const _look = new THREE.Vector3()
 
 function fireEnemyShot(e) {
   if (!G.rootScene || !G.ship) return
+  // 画面が弾で埋まらないよう、同時に飛んでいる敵弾の数に上限をつける
+  if (G.enemyShots.length >= C.enemyShotsMax) return
   if (!shotGeo) {
     // 見落とさないよう太く長く（原作の敵弾に近い存在感）。
     // ベタ塗りだと至近距離で「赤い板」に見えるため、加算合成で光の弾に見せる
@@ -187,8 +197,8 @@ function updateEnemyShots(dt) {
     s.position.addScaledVector(s.userData.vel, dt)
     s.userData.life += dt
 
-    // プレイヤーに命中（線分判定。墜落中・無敵中は無効）
-    const invincible = G.match.active && G.match.invT > 0
+    // プレイヤーに命中（線分判定。墜落中・無敵中・被弾直後の猶予中は無効）
+    const invincible = (G.match.active && G.match.invT > 0) || G.state.hitGraceT > 0
     if (!invincible && G.act.mode !== MODE.CRASH &&
         segmentPointDistance(s.userData.prevPos, s.position, ship.position) < C.playerHitRadius) {
       explodeSmall(s.position, 2.2, 0.4, 0xff6b6b)
@@ -199,6 +209,7 @@ function updateEnemyShots(dt) {
       G.state.damageFrom.y = _aim.y
       G.state.damageFrom.z = _aim.z
       hitShield(C.damageEnemyShot)
+      G.state.hitGraceT = C.playerHitGrace  // 直後の追撃を無効化（連続被弾での即死防止）
       G.rootScene.remove(s)
       G.enemyShots.splice(i, 1)
       continue
@@ -294,7 +305,8 @@ export function updateEnemies(dt) {
       continue
     }
 
-    const hitR = ENEMY[u.type].hitR
+    // 命中半径は「敵ごとの基本値＋レーザー強化ぶん」（強化するほど当てやすくなる）
+    const hitR = ENEMY[u.type].hitR + laserHitBonus()
 
     // --- レーザー命中（広め判定・即撃破）。他プレイヤーの弾は見た目だけなので除外 ---
     // 判定は「前フレーム位置→現在位置」の線分と敵中心の距離（低fpsでのすり抜け防止）

@@ -12,43 +12,83 @@ import { spawnBlast } from './effects.js'
 import { NET, isOnline } from '../../net/net.js'
 
 const _fwd = new THREE.Vector3()
+const _right = new THREE.Vector3()
+const _up = new THREE.Vector3()
 const _qAlign = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0))
 
-// Lv1レーザーのジオメトリ/マテリアルは1回だけ生成してキャッシュ（arwing準拠）
-let laserGeo = null
-let laserMat = null
-function laserAssets() {
-  if (!laserGeo) {
-    laserGeo = new THREE.CylinderGeometry(0.09, 0.09, 2.4, 6)
-    laserMat = new THREE.MeshBasicMaterial({ color: 0x6dff9e })
+// レベルごとのジオメトリ/マテリアルは1回だけ生成してキャッシュ（arwing準拠）
+const laserCache = {}
+function laserAssets(lv) {
+  if (!laserCache[lv]) {
+    const cfg = C.laserLevels[lv - 1]
+    laserCache[lv] = {
+      geo: new THREE.CylinderGeometry(cfg.radius, cfg.radius, 2.4 + (lv - 1) * 0.5, 6),
+      mat: new THREE.MeshBasicMaterial({ color: cfg.color }),
+    }
   }
-  return { geo: laserGeo, mat: laserMat }
+  return laserCache[lv]
 }
+
+// 現在のレーザーレベル（1〜3）。設定外の値が入っても壊れないよう丸める
+export function laserLv() {
+  return Math.min(C.laserLvMax, Math.max(1, G.act.laserLv || 1))
+}
+export function laserLvCfg() { return C.laserLevels[laserLv() - 1] }
+
+// 強化段階による命中半径の上乗せ（enemies.js / pvp.js が参照）
+export function laserHitBonus() { return laserLvCfg().hitBonus }
+
+// 現在のレベルでの連射間隔（GameTick / TouchControls が参照）
+export function laserCooldown() { return laserLvCfg().cd }
 
 export function fireLaser() {
   const ship = G.ship
   if (!ship || !G.rootScene) return
-  const { geo, mat } = laserAssets()
+  const lv = laserLv()
+  const cfg = C.laserLevels[lv - 1]
+  const { geo, mat } = laserAssets(lv)
   _fwd.set(0, 0, -1).applyQuaternion(ship.quaternion)
+  // 機体ローカルの左右方向（二連射のオフセットに使う）
+  _right.set(1, 0, 0).applyQuaternion(ship.quaternion)
+  _up.set(0, 1, 0).applyQuaternion(ship.quaternion)
 
-  const l = new THREE.Mesh(geo, mat)
-  // シリンダーはY軸向き → 機体前方に寝かせる
-  l.quaternion.copy(ship.quaternion).multiply(_qAlign)
-  l.position.copy(ship.position).addScaledVector(_fwd, 2)
-  l.userData = { life: 0, vel: _fwd.clone().multiplyScalar(C.laserSpeed), remote: false, prevPos: l.position.clone() }
-  G.rootScene.add(l)
-  G.lasers.push(l)
+  let first = null
+  for (const [ox, oy] of cfg.offsets) {
+    const l = new THREE.Mesh(geo, mat)
+    // シリンダーはY軸向き → 機体前方に寝かせる
+    l.quaternion.copy(ship.quaternion).multiply(_qAlign)
+    l.position.copy(ship.position).addScaledVector(_fwd, 2)
+      .addScaledVector(_right, ox).addScaledVector(_up, oy)
+    l.userData = { life: 0, vel: _fwd.clone().multiplyScalar(C.laserSpeed), remote: false, prevPos: l.position.clone() }
+    G.rootScene.add(l)
+    G.lasers.push(l)
+    if (!first) first = l
+  }
   playSnd('laser', 0.3)
 
   // マルチプレイ: 発射を他プレイヤーの画面でも再生してもらう
-  if (isOnline() && NET.sendFire) {
+  // （見た目だけなので、二連射でも代表1発ぶんだけ送って通信量を抑える）
+  if (isOnline() && NET.sendFire && first) {
     const q = ship.quaternion
     NET.sendFire({
       t: 'laser',
-      p: [+l.position.x.toFixed(1), +l.position.y.toFixed(1), +l.position.z.toFixed(1)],
+      lv,
+      p: [+first.position.x.toFixed(1), +first.position.y.toFixed(1), +first.position.z.toFixed(1)],
       q: [+q.x.toFixed(3), +q.y.toFixed(3), +q.z.toFixed(3), +q.w.toFixed(3)],
     })
   }
+}
+
+// ---- 強化アイテムの効果（items.js から呼ぶ。arwing_react の weapons.js と同じ） ----
+export function upgradeLaser() {
+  G.act.laserLv = Math.min(C.laserLvMax, laserLv() + 1)
+  G.act.laserPickups = (G.act.laserPickups || 0) + 1
+  useGameStore.getState().setHud({ laserLv: G.act.laserLv })
+}
+
+export function addBomb(n) {
+  G.act.bombs += n || 1
+  useGameStore.getState().setHud({ bombs: G.act.bombs })
 }
 
 // 受信データの座標・向きが正しい数値かを確認する（壊れた値を three.js に渡すと
@@ -62,7 +102,9 @@ export function isValidFireData(data) {
 const _q = new THREE.Quaternion()
 export function spawnRemoteLaser(data) {
   if (!G.rootScene || !isValidFireData(data)) return
-  const { geo, mat } = laserAssets()
+  // 相手のレベルは見た目だけに使う（壊れた値は1に丸める）
+  const lv = Math.min(C.laserLvMax, Math.max(1, Math.round(Number(data.lv)) || 1))
+  const { geo, mat } = laserAssets(lv)
   _q.set(data.q[0], data.q[1], data.q[2], data.q[3])
   _fwd.set(0, 0, -1).applyQuaternion(_q)
   const l = new THREE.Mesh(geo, mat)

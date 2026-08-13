@@ -10,9 +10,10 @@ import { G } from './state.js'
 import { CONFIG as C, MODE } from './config.js'
 import { FLIGHT, updateFlight } from './systems/flight.js'
 import { updateCamera } from './systems/camera.js'
-import { fireLaser } from './systems/weapons.js'
+import { fireLaser, laserCooldown } from './systems/weapons.js'
 import { updateLasers, updateBombs, updateBlasts } from './systems/effects.js'
 import { updateEnemies } from './systems/enemies.js'
+import { updateItems } from './systems/items.js'
 import { updateTargetBox, hideTargetBox } from './systems/targeting.js'
 import { NET, isOnline, leaveNetRoom, colorIndexOf } from '../net/net.js'
 import { installPvp, updatePvp, matchHudInfo, radarPlayers } from './systems/pvp.js'
@@ -33,20 +34,32 @@ function damageAngle() {
   return Math.atan2(d.x * rx + d.z * rz, d.x * fx + d.z * fz)
 }
 
+// アイテム種別ごとの表示色（レーダーの点と画面外の矢印で共用）
+// （銀リングは世界側も水色にしてあるので、ここも白ではなく水色にそろえる。
+//  白のままだと明るい空を背にした矢印が見えなくなる）
+const ITEM_COLOR = { laser: '#4bff8c', bomb: '#ff5a5a', silver: '#66ccff', gold: '#ffd23f' }
+
 function collectOffscreenMarkers(camera) {
   const out = []
-  const add = (pos, c) => {
-    if (out.length >= 6) return
+  const add = (pos, c, cap, col) => {
+    if (out.length >= cap) return
     _proj.copy(pos).project(camera)
     const behind = _proj.z > 1
     const onScreen = !behind && Math.abs(_proj.x) <= 0.95 && Math.abs(_proj.y) <= 0.95
     if (onScreen) return
     // 後方の相手は投影が反転するため符号を戻す
-    out.push({ x: behind ? -_proj.x : _proj.x, y: behind ? -_proj.y : _proj.y, b: behind, c })
+    out.push({ x: behind ? -_proj.x : _proj.x, y: behind ? -_proj.y : _proj.y, b: behind, c, col })
   }
-  for (const e of G.enemies) add(e.position, -1) // -1 = NPCの敵（赤）
+  for (const e of G.enemies) add(e.position, -1, 5) // -1 = NPCの敵（赤）
   for (const p of NET.players.values()) {
-    if (p.mesh && p.mesh.visible && p.alive) add(p.mesh.position, colorIndexOf(p.id))
+    if (p.mesh && p.mesh.visible && p.alive) add(p.mesh.position, colorIndexOf(p.id), 5)
+  }
+  // 強化アイテムは「近くにあるのに気づかない」のを防ぐぶんだけ出す（多いと画面が矢印だらけになる）
+  const cap = out.length + 2
+  for (const m of G.items) {
+    if (G.ship && m.position.distanceTo(G.ship.position) < 300) {
+      add(m.position, -2, cap, ITEM_COLOR[m.userData.itemType])
+    }
   }
   return out
 }
@@ -126,18 +139,22 @@ export default function GameTick() {
     const s = (G.state.boost ? 1.55 : 1.0) * pulse
     for (const glow of G.engineGlows) glow.scale.setScalar(s)
 
+    // 被弾直後の猶予（連続被弾での即死防止）を減らす
+    if (G.state.hitGraceT > 0) G.state.hitGraceT -= dt
+
     // レーザー連射（Space / J / クリック / LASERボタン。宙返り・帰還・墜落中は不可）
     G.state.fireCd -= dt
     const canFire = G.act.mode !== MODE.LOOPING && G.act.mode !== MODE.UTURN && G.act.mode !== MODE.CRASH
     if (canFire && (G.keys['Space'] || G.keys['KeyJ'] || G.shootHeld) && G.state.fireCd <= 0) {
       fireLaser()
-      G.state.fireCd = C.fireCooldown
+      G.state.fireCd = laserCooldown()
     }
 
     updateLasers(dt)
     updateBombs(dt)
     updateBlasts(dt)
     updateEnemies(dt)
+    updateItems(dt)
     updatePvp(dt)
     updateTargetBox()
 
@@ -166,6 +183,9 @@ export default function GameTick() {
         score: G.state.score,
         bombs: G.act.bombs,
         shield: Math.round(G.state.shield),
+        shieldMax: G.act.shieldMax,   // 金リングで増えるので毎回送る
+        laserLv: G.act.laserLv,
+        gold: G.act.goldCount,
         kills: G.state.kills,
         // 衝突直後だけ true → HUDの赤フラッシュ（快適化: ぶつかったことを分かりやすく）
         flash: G.state.time - (G.state.lastBounceT ?? -99) < C.bounceFlashDuration,
@@ -190,6 +210,12 @@ export default function GameTick() {
           })),
           // 他プレイヤーの位置（機体色の点）
           players: online ? radarPlayers() : [],
+          // 強化アイテムの位置（種類ごとの色の点。最大8個）
+          items: G.items.slice(0, 8).map((m) => ({
+            x: m.position.x / C.fieldRadius,
+            z: m.position.z / C.fieldRadius,
+            c: ITEM_COLOR[m.userData.itemType],
+          })),
         },
       }
       // 対戦中は順位表の撃墜数も更新（名簿の名前・色はロスター変更時に反映済み）

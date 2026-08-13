@@ -41,7 +41,8 @@ export default function TargetMarkers() {
         const top = `calc(50% - ${ny * 50}% + ${ny * inset}px)`
         // 画面座標での向き（CSSは下方向が+Y）
         const deg = (Math.atan2(-ny, nx) * 180) / Math.PI + 90
-        const col = m.c < 0 ? '#ff2b4b' : '#' + C.playerColors[m.c % C.playerColors.length].toString(16).padStart(6, '0')
+        // アイテムは種類ごとの色を直接持っている（m.col）。それ以外は敵=赤 / 相手=機体色
+        const col = m.col ?? (m.c < 0 ? '#ff2b4b' : '#' + C.playerColors[m.c % C.playerColors.length].toString(16).padStart(6, '0'))
         return (
           <div key={i} className="absolute" style={{
             left, top,

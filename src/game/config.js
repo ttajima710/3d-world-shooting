@@ -40,8 +40,19 @@ export const CONFIG = {
 
   // ---- 武器（arwing_react準拠） ----
   fireCooldown: 0.30,
-  laserSpeed: 120,
+  // 弾が遅いと「動いている敵の少し先を狙う」必要があり、普通に狙うとまず当たらない。
+  // 速くすることで「見えているところを撃てば当たる」感覚にする（実測で命中率が約2.5倍）
+  laserSpeed: 190,
   laserLife: 2.0,
+  // レーザーのレベル（アイテム「L」で上がる。arwing_react の lv1〜3 と同じ考え方）。
+  //   offsets: 機体ローカルの左右オフセット（2本 = 二連射）
+  //   hitBonus: この段階で命中半径に上乗せする量（強化＝当てやすくなる）
+  laserLevels: [
+    { color: 0x6dff9e, radius: 0.09, offsets: [[0, 0]], hitBonus: 0, cd: 0.30 },
+    { color: 0x6dff9e, radius: 0.11, offsets: [[-1.0, 0], [1.0, 0]], hitBonus: 1.5, cd: 0.28 },
+    { color: 0x49b6ff, radius: 0.15, offsets: [[-1.1, 0], [1.1, 0]], hitBonus: 3.0, cd: 0.26 },
+  ],
+  laserLvMax: 3,
   bombStart: 3,
   bombSpeed: 70,
   bombAutoDetonate: 1.0,
@@ -108,8 +119,10 @@ export const CONFIG = {
 
   // ---- 敵機（第4フェーズ）。当たり判定は快適さ優先で広め ----
   enemyMax: 8,             // 同時最大数
-  enemySpawnMin: 2.2,      // 出現間隔（秒）
-  enemySpawnMax: 4.2,
+  // 出現間隔（秒）。倒す速さ（約20機/分）が湧く速さ（約19機/分）を追い越して
+  // フィールドが空になっていたため、間隔を半分にして常に相手がいる状態にする
+  enemySpawnMin: 1.1,
+  enemySpawnMax: 2.2,
   enemySpawnDist: 300,     // プレイヤーの視界の奥から自然に現れる距離（近めにして遭遇密度を上げる）
   enemySpawnSpread: 1.5,   // 出現方向の広がり（rad）。狭いほど正面に出る＝視界に入りやすい
   enemyDespawn: 900,       // これ以上離れたら静かに消す（近くに湧き直す）
@@ -119,8 +132,8 @@ export const CONFIG = {
   enemy1Scale: 4.2,        // バウンディング球半径1に正規化した後の倍率（原作並みに大きく見せる）
   enemy2Scale: 4.6,
   enemyFaceY: Math.PI,     // モデルの機首向き補正（arwing準拠）
-  enemyHitRadius1: 6.0,    // レーザー命中半径（広め=快適重視）
-  enemyHitRadius2: 6.5,
+  enemyHitRadius1: 13.0,   // レーザー命中半径（広め=快適重視。強化段階でさらに広がる）
+  enemyHitRadius2: 13.5,
   enemyBodyRadius: 5.0,    // 体当たり判定
   enemyScore1: 100,
   enemyScore2: 200,
@@ -130,16 +143,44 @@ export const CONFIG = {
   enemyBreakRange: 45,     // これより近いと横へ抜ける（すれ違い）
   enemyTurnRate: 0.9,      // プレイヤーへ向き直る速さ（rad/s）
   // 敵の攻撃弾
-  enemyFireRange: 190,     // 射程（近づいてから撃たせて当たるようにする）
-  enemyFireAim: 0.65,      // 機首がプレイヤーを向いている度合い（cos。±約49°）
-  enemyFireCdMin: 0.9,     // 発射間隔（秒）
-  enemyFireCdMax: 2.0,
+  enemyFireRange: 170,     // 射程（近づいてから撃たせて当たるようにする）
+  enemyFireAim: 0.72,      // 機首がプレイヤーを向いている度合い（cos。±約44°）
+  enemyFireCdMin: 1.8,     // 発射間隔（秒）。短すぎると弾幕になって一方的に削られる
+  enemyFireCdMax: 3.6,
   enemyShotSpeed: 90,
   enemyShotLife: 4.0,
-  enemyShotMiss: 3.2,      // 着弾点でのブレ幅（距離によらず一定。当てすぎ防止）
+  enemyShotMiss: 4.6,      // 着弾点でのブレ幅（距離によらず一定。当てすぎ防止）
+  enemyShotsMax: 8,        // 同時に飛んでいる敵弾の上限（弾幕化の防止）
   playerHitRadius: 3.6,    // 敵弾がプレイヤーに当たる半径
-  damageEnemyShot: 7,      // 敵弾1発のダメージ
+  damageEnemyShot: 5,      // 敵弾1発のダメージ
+  playerHitGrace: 0.6,     // 被弾直後の小さな無敵時間（連続被弾での即死を防ぐ）
   damageFlashDuration: 1.2, // 被弾方向の表示時間
+
+  // ---- 強化アイテム（3D_shooting/arwing_react の items.js と同じ4種） ----
+  //   laser(L) = レーザー強化 / bomb(B) = ボム+1 / silver = シールド回復 / gold = 3個で最大シールド増
+  // 元実装はレール型で「奥から流れてくる」形だったが、こちらは全方位なので
+  // 「その場に浮かんで回る」形にし、一定時間で消える。
+  itemDropChance: 0.38,    // 敵を倒した時に落ちる確率
+  itemAmbientMax: 3,       // フィールドに漂わせておく数
+  itemAmbientInterval: 7,  // 漂うアイテムを足す間隔（秒）
+  itemAmbientDist: 260,    // 進行方向のこのくらい先に置く
+  // 取得半径。実測で「自然に出たアイテムに最も近づいた距離」が13〜14だったため、
+  // 8.0では271秒のプレイで1個も拾えなかった。余裕をもって広くとる
+  itemPickupRadius: 26,
+  itemMagnetRange: 70,     // この距離まで近づくと自機に引き寄せられる
+  // 引き寄せの強さ（1秒あたりの寄り具合）。強すぎると自機の約6倍の速さで
+  // 飛んできて「瞬間移動」に見えるため、自機速度の3倍程度に抑える
+  itemMagnetPull: 1.2,
+  itemLife: 30,            // 出てから消えるまで（秒）
+  itemDespawn: 700,        // これ以上離れたら消す
+  itemSpin: 1.8,           // 回転速度（rad/s）
+  itemScore: 80,           // 取得時のスコア
+  itemShieldRepair: 30,    // 銀リング: シールド回復量
+  // 金リング: この個数で最大シールドアップ。3個だと1プレイ（470秒計測）で一度も
+  // 到達できず機能が死んでいたため2個にする
+  itemGoldNeeded: 2,
+  itemShieldMaxMult: 1.5,  // 最大シールドの倍率
+  itemShieldMaxCap: 200,   // 最大シールドの上限
 
   // ---- シールドとダメージ ----
   shieldMax: 100,

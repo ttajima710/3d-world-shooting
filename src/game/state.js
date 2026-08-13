@@ -29,6 +29,8 @@ export const G = {
     enemyCd: 1.5,    // 次の敵が湧くまでの残り秒
     lastHitT: -99,   // 最後に敵/相手へ命中させた時刻（HUDの命中マーク用）
     lastDamageT: -99, // 最後に被弾した時刻（被弾方向インジケータ用）
+    hitGraceT: 0,    // 被弾直後の小さな無敵の残り秒（連続被弾での即死を防ぐ）
+    itemCd: 3,       // 次にフィールドへアイテムを漂わせるまでの残り秒
     // 被弾した方向（自機から見た攻撃元のワールド方向・単位ベクトル）
     damageFrom: { x: 0, y: 0, z: 1 },
   },
@@ -60,12 +62,18 @@ export const G = {
     lastTap: { L: -99, R: -99 },        // ダブルタップ判定
     touchBank: 0,                       // L/Rボタン長押しの追加バンク
     bombs: CONFIG.bombStart,
+    // 強化アイテムで変化する値（arwing_react の act と同じ持ち方）
+    laserLv: 1,                         // 1〜3
+    laserPickups: 0,                    // 「L」を取った累計
+    goldCount: 0,                       // 金リングの所持数（3個で最大シールドアップ）
+    shieldMax: CONFIG.shieldMax,        // 金リングで増える最大シールド
   },
 
   // ---- エンティティプール ----
   lasers: [],
   bombs: [],
   blasts: [],
+  items: [],
 
   // ---- 入力 ----
   keys: {},
